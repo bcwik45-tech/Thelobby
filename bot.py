@@ -1,0 +1,124 @@
+import discord
+from discord.ext import commands
+from discord.ui import View, Button
+from datetime import datetime
+import os
+
+# Konfiguracja intencji
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+intents.guilds = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# --- ID KANAŁÓW I RÓL ---
+BOOST_CHANNEL_ID = 1558818745084805190
+
+# Role do autoroli (kategorie)
+AUTOROLE_DATA = {
+    "CS": 1558280731627880518,
+    "FN": 1558280885587935344,
+    "GTA": 1558281042870145064,
+    "Inne": 1558281149569175604
+}
+
+# Kategorie ticketów (ID kategorii na serwerze Discord)
+TICKET_CATEGORIES = {
+    "Rekrutacja": 1558817096534855751,
+    "Partnerstwo": 1558817268799111238,
+    "Owner": 155881735224060315
+}
+
+# Role posiadające dostęp do danych ticketów (oraz do pingowania)
+TICKET_ROLES = {
+    "Rekrutacja": [1558480828156088471],
+    "Partnerstwo": [1558279332592361522, 1558279751376965742],
+    "Owner": [1558279332592361522, 1558279751376965742]
+}
+
+
+@bot.event
+async def on_ready():
+    print(f"Zalogowano jako {bot.user} (ID: {bot.user.id})")
+    try:
+        synced = await bot.tree.sync()
+        print(f"Zsynchronizowano {len(synced)} komend slash.")
+    except Exception as e:
+        print(e)
+
+
+# ==================== PRZYWITANIA ====================
+@bot.event
+async def on_member_join(member: discord.Member):
+    channel = member.guild.system_channel
+    if not channel:
+        return
+
+    embed = discord.Embed(
+        title="New member!",
+        description=f"🎉 Hi\n{member.mention}\nWelcome to the best cfg in Poland!\nGo check out our stuff!",
+        color=discord.Color.from_rgb(40, 40, 40)
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    
+    member_count = member.guild.member_count
+    embed.add_field(name="", value=f"**You're our {member_count} member!**", inline=False)
+    
+    created_at_str = member.created_at.strftime("%d.%m.%Y %H:%M:%S")
+    joined_at_str = member.joined_at.strftime("%d.%m.%Y %H:%M")
+    
+    info_text = (
+        f"💳 **Discord account created:**\n{created_at_str}\n"
+        f"👤 **Username:** `{member.name}`\n"
+        f"📅 **Joined at:** {joined_at_str}"
+    )
+    embed.add_field(name="Member Info:", value=info_text, inline=False)
+
+    await channel.send(embed=embed)
+
+
+# ==================== BOOSTY ====================
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if before.premium_since is None and after.premium_since is not None:
+        channel = after.guild.get_channel(BOOST_CHANNEL_ID)
+        if channel:
+            boost_count = after.guild.premium_subscription_count
+            boost_level = after.guild.premium_tier
+            
+            embed = discord.Embed(
+                title="New server Boost!",
+                description=f"{after.mention} **BOOST!**\nthanks for boosting our server!\nGo check out our booster zone!",
+                color=discord.Color.from_rgb(150, 100, 255)
+            )
+            embed.set_thumbnail(url=after.display_avatar.url)
+            
+            info_text = (
+                f"🧊 **Server Boost level:** `{boost_level}`\n"
+                f"🔢 **Boost count:** `{boost_count}`"
+            )
+            embed.add_field(name="Boost Info:", value=info_text, inline=False)
+            embed.set_image(url="https://images.unsplash.com/photo-1550684848-fac1c5b4e853")
+            
+            await channel.send(embed=embed)
+
+
+# ==================== KOMENDY /bandc i /unbandc ====================
+@bot.tree.command(name="bandc", description="Banuje użytkownika.")
+async def bandc(interaction: discord.Interaction, member: discord.Member, reason: str = "Brak powodu"):
+    if not interaction.user.guild_permissions.ban_members:
+        await interaction.response.send_message("Nie masz uprawnień do banowania!", ephemeral=True)
+        return
+    
+    await member.ban(reason=reason)
+    await interaction.response.send_message(f"Pomyślnie zbanowano użytkownika {member.mention}. Powód: {reason}")
+
+@bot.tree.command(name="unbandc", description="Odbanowuje użytkownika po ID.")
+async def unbandc(interaction: discord.Interaction, user_id: str, reason: str = "Brak powodu"):
+    if not interaction.user.guild_permissions.ban_members:
+        await interaction.response.send_message("Nie masz uprawnień do odbanowywania!", ephemeral=True)
+        return
+    
+    try:
+        user = await bot.fetch_user(int(user
