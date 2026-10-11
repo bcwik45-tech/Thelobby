@@ -121,4 +121,123 @@ async def unbandc(interaction: discord.Interaction, user_id: str, reason: str = 
         return
     
     try:
-        user = await bot.fetch_user(int(user
+        user = await bot.fetch_user(int(user_id))
+        await interaction.guild.unban(user, reason=reason)
+        await interaction.response.send_message(f"Pomyślnie odbanowano użytkownika {user.name}.")
+    except Exception as e:
+        await interaction.response.send_message(f"Wystąpił błąd podczas odbanowywania: {e}", ephemeral=True)
+
+
+# ==================== AUTOROLA SETUP ====================
+class AutoRoleView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def handle_role(self, interaction: discord.Interaction, role_id: int, role_name: str):
+        role = interaction.guild.get_role(role_id)
+        if not role:
+            await interaction.response.send_message("Rola nie istnieje na tym serwerze!", ephemeral=True)
+            return
+        
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"Pomyślnie **usunięto** rolę {role.name}.", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"Pomyślnie **nadano** rolę {role.name}.", ephemeral=True)
+
+    @discord.ui.button(label="CS", style=discord.ButtonStyle.primary, custom_id="role_cs")
+    async def cs_button(self, interaction: discord.Interaction, button: Button):
+        await self.handle_role(interaction, AUTOROLE_DATA["CS"], "CS")
+
+    @discord.ui.button(label="FN", style=discord.ButtonStyle.primary, custom_id="role_fn")
+    async def fn_button(self, interaction: discord.Interaction, button: Button):
+        await self.handle_role(interaction, AUTOROLE_DATA["FN"], "FN")
+
+    @discord.ui.button(label="GTA", style=discord.ButtonStyle.primary, custom_id="role_gta")
+    async def gta_button(self, interaction: discord.Interaction, button: Button):
+        await self.handle_role(interaction, AUTOROLE_DATA["GTA"], "GTA")
+
+    @discord.ui.button(label="Inne", style=discord.ButtonStyle.secondary, custom_id="role_inne")
+    async def inne_button(self, interaction: discord.Interaction, button: Button):
+        await self.handle_role(interaction, AUTOROLE_DATA["Inne"], "Inne")
+
+
+@bot.tree.command(name="setup_autorola", description="Wysyła panel wybierania ról (CS, FN, GTA, Inne).")
+async def setup_autorola(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Musisz być administratorem!", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="Wybierz swoje role gry",
+        description="Kliknij odpowiedni przycisk poniżej, aby otrzymać lub usunąć daną rolę.",
+        color=discord.Color.blurple()
+    )
+    await interaction.channel.send(embed=embed, view=AutoRoleView())
+    await interaction.response.send_message("Wysłano panel autoroli!", ephemeral=True)
+
+
+# ==================== TICKETY (BEZ SHOP I SUPPORT) ====================
+class TicketCreateView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def create_ticket(self, interaction: discord.Interaction, ticket_type: str):
+        guild = interaction.guild
+        category_id = TICKET_CATEGORIES.get(ticket_type)
+        category = guild.get_channel(category_id) if category_id else None
+        
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        }
+
+        role_pings = []
+        role_ids = TICKET_ROLES.get(ticket_type, [])
+        for r_id in role_ids:
+            role = guild.get_role(r_id)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+                role_pings.append(role.mention)
+
+        channel_name = f"ticket-{ticket_type.lower()}-{interaction.user.name}"
+        ticket_channel = await guild.create_text_channel(
+            name=channel_name,
+            category=category,
+            overwrites=overwrites
+        )
+
+        pings_str = " ".join(role_pings)
+        embed = discord.Embed(
+            title=f"Ticket: {ticket_type}",
+            description=f"Witaj {interaction.user.mention}!\nOpisz swój problem lub sprawę. Administracja wkrótce odpowie.",
+            color=discord.Color.green()
+        )
+        
+        class CloseTicketView(View):
+            @discord.ui.button(label="Zamknij ticket", style=discord.ButtonStyle.danger, custom_id="close_ticket")
+            async def close_btn(self, inter: discord.Interaction, btn: Button):
+                await inter.response.send_message("Zamykanie kanału za 3 sekundy...")
+                import asyncio
+                await asyncio.sleep(3)
+                await inter.channel.delete()
+
+        await ticket_channel.send(content=pings_str, embed=embed, view=CloseTicketView())
+        await interaction.response.send_message(f"Utworzono ticket: {ticket_channel.mention}", ephemeral=True)
+
+    @discord.ui.button(label="Owner 👑", style=discord.ButtonStyle.grey, custom_id="ticket_owner")
+    async def owner_ticket(self, interaction: discord.Interaction, button: Button):
+        await self.create_ticket(interaction, "Owner")
+
+    @discord.ui.button(label="Partnerstwo", style=discord.ButtonStyle.blurple, custom_id="ticket_partner")
+    async def partner_ticket(self, interaction: discord.Interaction, button: Button):
+        await self.create_ticket(interaction, "Partnerstwo")
+
+    @discord.ui.button(label="Recruitment 📄", style=discord.ButtonStyle.danger, custom_id="ticket_recruitment")
+    async def recruitment_ticket(self, interaction: discord.Interaction, button: Button):
+        await self.create_ticket(interaction, "Rekrutacja")
+
+
+@bot.tree.command(name="setup_
